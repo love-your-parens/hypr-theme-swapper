@@ -12,7 +12,7 @@
                        :desc "Instructs the program to run once instead of looping."}}})
 (def cli-opts (cli/parse-opts *command-line-args* cli-spec))
 (def sh (comp process/check process/sh))
-(def config-file (fs/file "./config.edn"))
+(def config-file (fs/file (.getParent (fs/file *file*)) "config.edn"))
 (def config (or (when (fs/exists? config-file)
                   (edn/read (java.io.PushbackReader. (io/reader config-file))))
                 {}))

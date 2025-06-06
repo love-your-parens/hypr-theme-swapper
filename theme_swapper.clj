@@ -36,7 +36,7 @@
 (defn swap-theme []
   (when-let [wallpaper (random-wallpaper)]
     (try (sh ["matugen" "image" wallpaper])
-         (sh ["systemctl" "--user" "restart" "waybar"])
+         (sh ["killall" "-SIGUSR2" "waybar"])
          (catch Exception e
            (log/warn (.getMessage e))))))
 

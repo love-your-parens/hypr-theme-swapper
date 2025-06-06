@@ -40,13 +40,17 @@
          (catch Exception e
            (log/warn (.getMessage e))))))
 
+(defn sleep []
+  (Thread/sleep (* swap-interval 1000)))
+
 ;;;; Program loop.
 (if (:once cli-opts)
   (swap-theme)
   (do
     (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
+    (when (:defer cli-opts) (sleep))
     (loop []
       (log/info "Swapping theme...")
       (swap-theme)
-      (Thread/sleep (* swap-interval 1000))
+      (sleep)
       (recur))))

@@ -1,2 +1,2 @@
 #!/bin/sh
-/bin/env bb ./theme_swapper.clj $@
+/bin/env bb $(dirname $0)/theme_swapper.clj $@

@@ -46,6 +46,7 @@
            (log/warn (.getMessage e))))))
 
 (defn sleep []
+  (System/gc)
   (Thread/sleep (* swap-interval 1000)))
 
 ;;;; Program loop.

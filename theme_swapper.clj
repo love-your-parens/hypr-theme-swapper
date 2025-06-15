@@ -41,7 +41,10 @@
 (defn swap-theme []
   (when-let [wallpaper (random-wallpaper)]
     (try (sh ["matugen" "image" wallpaper])
-         (sh ["killall" "-SIGUSR2" "waybar"])
+         (sh ["killall" "-SIGINT" "walker"])
+         (sh ["systemctl" "--user" "reload" "swaync"])
+         ;; Currently taken care of by Matugen.
+         ;; (sh ["swww" "img" "--transition-fps=240" wallpaper])
          (catch Exception e
            (log/warn (.getMessage e))))))
 
@@ -60,3 +63,11 @@
       (swap-theme)
       (sleep)
       (recur))))
+
+;;;; Notes
+(comment
+  "Below are the two clean ways of forcing Waybar to reload its configuration.
+  Neither of these is necessary here because hot-reloading CSS is supported.
+  See: reload_style_on_change"
+  (sh ["killall" "-SIGUSR2" "waybar"])
+  (sh ["systemctl" "--user" "reload" "waybar"]))

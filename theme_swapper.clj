@@ -20,18 +20,23 @@
 (def swap-interval (get config :swap-interval 300))
 
 (defn picture? [file]
-  (-> file
-      fs/extension
-      string/lower-case
-      #{"jpg" "jpeg" "png" "bmp" "webp"}
-      some?))
+  (some-> file
+          fs/extension
+          string/lower-case
+          #{"jpg" "jpeg" "png" "bmp" "webp"}))
 
 (def wallpapers
   (fs/list-dirs wallpaper-directories picture?))
 
+(def previous-wallpaper (atom nil))
+
 (defn random-wallpaper []
   (when (seq wallpapers)
-    (rand-nth wallpapers)))
+    (let [w (rand-nth wallpapers)]
+      (if (and (> (count wallpapers) 1)
+               (= w @previous-wallpaper))
+        (recur)
+        (reset! previous-wallpaper w)))))
 
 (defn swap-theme []
   (when-let [wallpaper (random-wallpaper)]

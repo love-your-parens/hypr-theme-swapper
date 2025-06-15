@@ -43,8 +43,10 @@
     (try (sh ["matugen" "image" wallpaper])
          (sh ["killall" "-SIGINT" "walker"])
          (sh ["systemctl" "--user" "reload" "swaync"])
+
          ;; Currently taken care of by Matugen.
          ;; (sh ["swww" "img" "--transition-fps=240" wallpaper])
+
          (catch Exception e
            (log/warn (.getMessage e))))))
 
@@ -66,9 +68,33 @@
         (recur)))))
 
 ;;;; Notes
+
+;;; Reloading Waybar
+;; Below are the two clean ways of forcing Waybar to reload its configuration.
+;; Neither of these is necessary here because hot-reloading CSS is supported.
+;; See: `reload_style_on_change`
 (comment
-  "Below are the two clean ways of forcing Waybar to reload its configuration.
-  Neither of these is necessary here because hot-reloading CSS is supported.
-  See: reload_style_on_change"
   (sh ["killall" "-SIGUSR2" "waybar"])
   (sh ["systemctl" "--user" "reload" "waybar"]))
+
+;;; Hyprland flickering
+;; Hyprland hot-reloads its configurations, so it doesn't require any handling besides
+;; receiving a new color-definition file - which Matugen happily provides. Sadly, this
+;; produces unpleasant side-effects. Namely:
+;;
+;; - the desktop flashes - atypical for Hyprland which normally employs smooth transitions
+;; - swww's transition is often cut short or omitted wholesale
+;;
+;; Of note: this issue will also occur when the color-definition is replaced wholesale via copy.
+;; It seems to happen less frequently when commiting edits to the file directly.
+;;
+;; Presumed causes:
+;; x The theme definition is too long for Hyprland to grok efficiently.
+;;   Doesn't seem to hold - flickering still happens with just three definitions.
+;; x Hypr reacts to intermediate writes while the file is being written.
+;;   How to prevent this? flock won't prevent reads. Maybe chmod instead?
+;;   Again - even direct writes to the main config seem to cause this, so probably not it.
+;; x Theme configuration is sourced at the tail end of Hypr's configs (as part of the config.d chain).
+;;   Could this affect the scope of hot-reload in some way? No, happens even at the top of the config.
+;;
+;; It might just be a quirk of Hyprland's hot reload, in which case there's nothing to do but to live with it.

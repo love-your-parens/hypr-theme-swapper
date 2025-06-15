@@ -1,3 +1,4 @@
 /config.edn
 /.clj-kondo/
 /.lsp/
+/.nrepl-port

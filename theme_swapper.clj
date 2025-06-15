@@ -53,16 +53,17 @@
   (Thread/sleep (* swap-interval 1000)))
 
 ;;;; Program loop.
-(if (:once cli-opts)
-  (swap-theme)
-  (do
-    (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
-    (when (:defer cli-opts) (sleep))
-    (loop []
-      (log/info "Swapping theme...")
-      (swap-theme)
-      (sleep)
-      (recur))))
+(when (= *file* (System/getProperty "babashka.file")) ; running as a script
+  (if (:once cli-opts)
+    (swap-theme)
+    (do
+      (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
+      (when (:defer cli-opts) (sleep))
+      (loop []
+        (log/info "Swapping theme...")
+        (swap-theme)
+        (sleep)
+        (recur)))))
 
 ;;;; Notes
 (comment

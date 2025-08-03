@@ -1,4 +1,5 @@
 (ns theme-swapper
+  (:gen-class)
   (:require [babashka.fs :as fs]
             [babashka.cli :as cli]
             [clojure.tools.logging :as log]
@@ -136,7 +137,7 @@
         (.interrupt worker)
         (shutdown-agents)))))
 
-(when (= *file* (System/getProperty "babashka.file")) ; running as a script
+(defn -main [& _]
   (let [{:keys [once cmd]} (:opts cli-args)]
     (cond
       once (swap-theme)
@@ -144,6 +145,9 @@
                (catch java.net.ConnectException _
                  (log/error "Could not submit command - is the process running?")))
       :else (main-thread))))
+
+(when (= *file* (System/getProperty "babashka.file")) ; running as a script
+  (-main))
 
 ;;;; Notes
 

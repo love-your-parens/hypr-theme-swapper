@@ -134,8 +134,7 @@
         (log/error "Could not open port " port " - is the process already running?"))
       (finally
         (log/info "Shutting down...")
-        (.interrupt worker)
-        (shutdown-agents)))))
+        (.interrupt worker)))))
 
 (defn -main [& _]
   (let [{:keys [once cmd]} (:opts cli-args)]
@@ -144,7 +143,8 @@
       cmd (try (tell cmd)
                (catch java.net.ConnectException _
                  (log/error "Could not submit command - is the process running?")))
-      :else (main-thread))))
+      :else (main-thread)))
+  (shutdown-agents))
 
 (when (= *file* (System/getProperty "babashka.file")) ; running as a script
   (-main))

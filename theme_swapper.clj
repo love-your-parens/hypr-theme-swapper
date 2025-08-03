@@ -5,12 +5,17 @@
             [clojure.string :as string]
             [babashka.process :as process]
             [clojure.edn :as edn]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io :refer [reader writer]])
+  (:import [java.net ServerSocket Socket InetSocketAddress]))
+
+;;;; Main program logic.
 
 (def cli-spec {:spec
                {:once {:coerce :boolean
-                       :desc "Instructs the program to run once instead of looping."}}})
-(def cli-opts (cli/parse-opts *command-line-args* cli-spec))
+                       :desc "Instructs the program to run once instead of looping."}
+                :cmd {:coerce :string
+                      :desc "Passes a command to a running process, if available."}}})
+(def cli-args (cli/parse-args *command-line-args* cli-spec))
 (def sh (comp process/check process/sh))
 (def config-file (fs/file (.getParent (fs/file *file*)) "config.edn"))
 (def config (or (when (fs/exists? config-file)
@@ -54,18 +59,91 @@
   (System/gc)
   (Thread/sleep (* swap-interval 1000)))
 
+;;;; Socket control mechanisms.
+;; NOTE Lifted wholesale from attendance-bot.
+
+(def port (or (when-let [p (System/getenv "PORT")]
+                (Integer/parseInt p))
+              (:port config)
+              24862))
+(def stop-words #{"quit" "exit" "stop"})
+
+(defn receive
+  [socket]
+  (with-open [s (.accept socket)]
+    (.readLine (reader s))))
+
+(defn listen
+  ([port callback]
+   (with-open [server (ServerSocket. port)]
+     (loop [msg (receive server)]
+       (callback msg)
+       (when-not (contains? stop-words msg)
+         (case msg
+           "opts" (log/info (prn-str cli-args))
+           :nothing!)
+         (recur (receive server))))))
+  ([port]
+   (listen port #(log/info (str "Listener heard a tell: " %))))
+  ([]
+   (listen port)))
+
+(defn tell
+  ([port msg]
+   (with-open [socket (Socket.)]
+     (.connect socket (InetSocketAddress. "localhost" port))
+     (let [w (writer socket)]
+       (.write w msg)
+       (.flush w))))
+  ([msg]
+   (tell port msg)))
+
+(defn stop-listening
+  ([port]
+   (tell port stop-words))
+  ([]
+   (tell port stop-words)))
+
 ;;;; Program loop.
+
+(defn worker-thread []
+  (try
+    (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
+    (when (:defer (:opts cli-args))
+      (sleep))
+    (loop []
+      (log/info "Swapping theme...")
+      (swap-theme)
+      (sleep)
+      (recur))
+    (catch InterruptedException _
+      (log/info "Worker process interrupted - aborting"))
+    (catch Exception e
+      (log/error "Unhandled exception: " (.getMessage e))
+      (log/error "Process shutting down..."))))
+
+(defn main-thread []
+  (let [worker (Thread. worker-thread)]
+    (try
+      (log/info "Starting the worker thread...")
+      (.start worker)
+      (log/info "Now listening on port" port)
+      (listen) ; NOTE the listener takes and blocks the main thread
+      (catch java.net.BindException _
+        (log/error "Could not open port " port " - is the process already running?"))
+      (finally
+        (log/info "Shutting down...")
+        (.interrupt worker)
+        (shutdown-agents)))))
+
 (when (= *file* (System/getProperty "babashka.file")) ; running as a script
-  (if (:once cli-opts)
-    (swap-theme)
-    (do
-      (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
-      (when (:defer cli-opts) (sleep))
-      (loop []
-        (log/info "Swapping theme...")
-        (swap-theme)
-        (sleep)
-        (recur)))))
+  (let [{:keys [once cmd]} (:opts cli-args)]
+    (cond
+      once (swap-theme)
+      cmd (try (tell cmd)
+               (catch java.net.ConnectException _
+                 (log/error "Could not submit command - is the process running?")))
+      :else (main-thread))))
 
 ;;;; Notes
 

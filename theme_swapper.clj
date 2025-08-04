@@ -56,18 +56,56 @@
          (catch Exception e
            (log/warn (.getMessage e))))))
 
-(defn sleep []
+(defn sleep
+  [interval]
   (System/gc)
-  (Thread/sleep (* swap-interval 1000)))
+  (Thread/sleep (* interval 1000)))
+
+;;;; Worker-thread control.
+
+(defn worker-loop
+  [interval defer?]
+  (try
+    (log/info "Launching the theme swapper. Swap interval:" interval "seconds.")
+    (when defer? (sleep interval))
+    (loop []
+      (log/info "Swapping theme...")
+      (swap-theme)
+      (sleep interval)
+      (recur))
+    (catch InterruptedException _
+      (log/info "Worker process interrupted - aborting"))
+    (catch Exception e
+      (log/error "Unhandled exception: " (.getMessage e))
+      (log/error "Worker process shutting down..."))))
+
+(def worker-params (atom {:interval swap-interval :defer? false :active? false}))
+(def worker-thread (atom nil))
+
+(add-watch worker-params
+           :worker-restart-on-change
+           (fn [_ _ _ {:keys [interval defer? active?]}]
+             (swap! worker-thread (fn [t] (when t (.interrupt t)) nil))
+             (when active?
+               (let [t (Thread. (partial worker-loop interval defer?))]
+                 (reset! worker-thread t)
+                 (.start t)))))
+
+(defn start-worker []
+  (swap! worker-params assoc :active? true))
+
+(defn stop-worker []
+  (swap! worker-params assoc :active? false))
 
 ;;;; Socket control mechanisms.
 ;; NOTE Lifted wholesale from attendance-bot.
 
+(def default-port 24862)
 (def port (or (when-let [p (System/getenv "PORT")]
                 (Integer/parseInt p))
               (:port config)
-              24862))
-(def stop-words #{"quit" "exit" "stop"})
+              default-port))
+(def stop-words #{"quit" "exit" "terminate" "interrupt" "abort"})
 
 (defn receive
   [socket]
@@ -81,8 +119,9 @@
        (callback msg)
        (when-not (contains? stop-words msg)
          (case msg
-           "opts" (log/info (prn-str cli-args))
-           :nothing!)
+           "restart" (start-worker)
+           "start" (start-worker)
+           "stop" (stop-worker))
          (recur (receive server))))))
   ([port]
    (listen port #(log/info (str "Listener heard a tell: " %))))
@@ -99,42 +138,21 @@
   ([msg]
    (tell port msg)))
 
-(defn stop-listening
-  ([port]
-   (tell port stop-words))
-  ([]
-   (tell port stop-words)))
-
 ;;;; Program loop.
 
-(defn worker-thread []
-  (try
-    (log/info "Launching the theme swapper. Swap interval:" swap-interval "seconds.")
-    (when (:defer (:opts cli-args))
-      (sleep))
-    (loop []
-      (log/info "Swapping theme...")
-      (swap-theme)
-      (sleep)
-      (recur))
-    (catch InterruptedException _
-      (log/info "Worker process interrupted - aborting"))
-    (catch Exception e
-      (log/error "Unhandled exception: " (.getMessage e))
-      (log/error "Process shutting down..."))))
-
 (defn main-thread []
-  (let [worker (Thread. worker-thread)]
-    (try
-      (log/info "Starting the worker thread...")
-      (.start worker)
-      (log/info "Now listening on port" port)
-      (listen) ; NOTE the listener takes and blocks the main thread
-      (catch java.net.BindException _
-        (log/error "Could not open port " port " - is the process already running?"))
-      (finally
-        (log/info "Shutting down...")
-        (.interrupt worker)))))
+  (try
+    (log/info "Setting up the worker...")
+    (reset! worker-params {:interval swap-interval
+                           :defer? (:defer (:opts cli-args))
+                           :active? true})
+    (log/info "Now listening on port" port)
+    (listen) ; NOTE the listener takes and blocks the main thread
+    (catch java.net.BindException _
+      (log/error "Could not open port " port " - is the process already running?"))
+    (finally
+      (log/info "Shutting down...")
+      (stop-worker))))
 
 (defn -main [& _]
   (let [{:keys [once cmd]} (:opts cli-args)]

@@ -178,6 +178,14 @@
   (sh ["systemctl" "--user" "reload" "waybar"]))
 
 ;;; Hyprland flickering
+;;
+;; ---
+;; UPDATE
+;; It's very likely that this problem can be circumvented by using `hyprctl reload config-only`.
+;; This stands to reason – updating monitor settings could well cause a stutter!
+;; This of course requires that hot reload be disabled.
+;; ---
+;;
 ;; Hyprland hot-reloads its configurations, so it doesn't require any handling besides
 ;; receiving a new color-definition file - which Matugen happily provides. Sadly, this
 ;; produces unpleasant side-effects. Namely:
